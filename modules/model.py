@@ -77,12 +77,13 @@ def get_diag(graph, k):
 
 
 class Model(nn.Module):
-    def __init__(self, g, n_in, n_hidden, k):
+    def __init__(self, g, n_in, n_hidden, k, grid_size, spline_order):
         super(Model, self).__init__()
         self.g = g
         self.k = k
-        self.fc_g = KAN([n_in, n_hidden])
-        self.fc_n = KAN([n_in, n_hidden])
+        self.fc_g = nn.Linear(n_in, n_hidden)
+        # self.fc_n = KAN([n_in, n_hidden], grid_size=grid_size, spline_order=spline_order)
+        self.fc_n = KAN([n_in, n_hidden], grid_size=grid_size, spline_order=spline_order)
 
     def forward(self, target_features, neighbour_features):
         score = torch.nn.functional.cosine_similarity(self.fc_n(target_features.detach()), self.fc_g(neighbour_features.detach()))
