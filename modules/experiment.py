@@ -32,8 +32,9 @@ def run_experiment(args, seed, device, dataloader, ano_label, pretrained_model=N
         args, dataloader, model, optimizer, loss_function
     )
     mem_train = torch.cuda.max_memory_allocated()
-    model.load(state_path)
-    model.to(device)
+    model.load_state_dict(torch.load(state_path))
+    # model.load(state_path)
+    # model.to(device)
     torch.cuda.reset_peak_memory_stats()
     score, time_test = eval_model(args, dataloader, model, ano_label)
     mem_test = torch.cuda.max_memory_allocated()

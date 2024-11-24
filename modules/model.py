@@ -82,8 +82,10 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.g = g
         self.k = k
-        self.fc_g = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
-        self.fc_n = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
+        # self.fc_g = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
+        # self.fc_n = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
+        self.fc_g = nn.Linear(n_in, n_hidden)
+        self.fc_n = nn.Linear(n_in, n_hidden)
 
     def forward(self, target_features, neighbour_features):
         score = torch.nn.functional.cosine_similarity(self.fc_n(target_features.detach()), self.fc_g(neighbour_features.detach()))
