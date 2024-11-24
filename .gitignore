@@ -159,7 +159,6 @@ data_loader_all.py
 /scripts/exp_scripts/
 
 test.*
-modules/efficient_kan.py
 *.pickle
 *.pkl
 *.mat

@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 import dgl.function as fn
 import os
-import sys
 
-from .kan import KAN
+from .efficient_kan import KAN
 
 
 class Dataloader:
@@ -82,30 +81,9 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.g = g
         self.k = k
-        self.fc_g = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
-        self.fc_n = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
+        self.fc_g = KAN([n_in, n_hidden])
+        self.fc_n = KAN([n_in, n_hidden])
 
     def forward(self, target_features, neighbour_features):
         score = torch.nn.functional.cosine_similarity(self.fc_n(target_features.detach()), self.fc_g(neighbour_features.detach()))
         return -1 * score.unsqueeze(0)
-
-    def before_train(self, lamb=0):
-        self.old_save_act, self.old_symbolic_enabled = zip(self.fc_g.disable_symbolic_in_fit(lamb), self.fc_n.disable_symbolic_in_fit(lamb))
-
-    def after_train(self):
-        self.fc_g.save_act, self.fc_n.save_act = self.old_save_act
-        self.fc_g.symbolic_enabled, self.fc_n.symbolic_enabled = self.old_symbolic_enabled
-
-    def save(self, path):
-        os.makedirs(path, exist_ok=True)
-        self.fc_g.saveckpt(path+"/fc_g")
-        self.fc_n.saveckpt(path+"/fc_n")
-
-    def load(self, path):
-        self.fc_g = KAN.loadckpt(path+"/fc_g")
-        self.fc_n = KAN.loadckpt(path+"/fc_n")
-
-    @torch.no_grad()
-    def update_grid(self, target_features, neighbour_features):
-        self.fc_g.update_grid(target_features)
-        self.fc_n.update_grid(neighbour_features)

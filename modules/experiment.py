@@ -1,12 +1,9 @@
-import numpy as np
 import torch
-import time
 
 from sklearn.metrics._ranking import roc_auc_score
-from tqdm.auto import tqdm
 from .model import Model
 from .train import train_model, eval_model
-from .utils import load_dataset, set_random_seeds, rescale
+from .utils import set_random_seeds
 
 def run_experiment(args, seed, device, dataloader, ano_label, pretrained_model=None):
     set_random_seeds(seed)
@@ -32,8 +29,7 @@ def run_experiment(args, seed, device, dataloader, ano_label, pretrained_model=N
         args, dataloader, model, optimizer, loss_function
     )
     mem_train = torch.cuda.max_memory_allocated()
-    model.load(state_path)
-    model.to(device)
+    model.load_state_dict(torch.load(state_path))
     torch.cuda.reset_peak_memory_stats()
     score, time_test = eval_model(args, dataloader, model, ano_label)
     mem_test = torch.cuda.max_memory_allocated()

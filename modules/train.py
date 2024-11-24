@@ -1,9 +1,7 @@
 import time
-from sklearn.metrics import roc_auc_score
-import random
 import numpy as np
 import torch
-from .utils import set_random_seeds, rescale
+from .utils import rescale
 from tqdm.auto import tqdm
 
 
@@ -12,10 +10,10 @@ def train_model(args, dataloader, model, optimizer, loss_function):
         "best_loss": 1e9,
         "best_epoch": -1,
     }
-    state_path = f'./ckpt/{args.dataset}'
+    state_path = f'./ckpt/{args.dataset}.pkl'
     time_train = time.time()
     model.train()
-    model.before_train()
+
     if args.batch_size > 0:
         label_ones =  dataloader.label_ones[:, 0:args.batch_size].to("cuda")
         label_zeros =  dataloader.label_zeros[:, 0:args.batch_size].to("cuda")
@@ -24,7 +22,6 @@ def train_model(args, dataloader, model, optimizer, loss_function):
         en_p, en_n, eg_p, eg_aug = dataloader.get_data()
         # Full batch
         if args.batch_size == -1:
-            model.update_grid(en_p, eg_p)
 
             # Full batch
             score_pos = rescale(model(en_p, eg_p))
@@ -42,15 +39,11 @@ def train_model(args, dataloader, model, optimizer, loss_function):
         else:
             i = 0
             loss_pos = 0
-            update_grid_i = random.choice(range(len(en_p))) if epoch < args.num_epoch//2 else None
             while i * args.batch_size < len(en_p):
                 start_index = i * args.batch_size
                 end_index = min((i + 1) * args.batch_size, len(en_p))
                 en_p_batch, en_n_batch, eg_p_batch, eg_aug_batch = en_p[start_index:end_index], en_n[start_index:end_index], eg_p[start_index:end_index], eg_aug[start_index:end_index]
                 en_p_batch, en_n_batch, eg_p_batch, eg_aug_batch = [x.to("cuda") for x in [ en_p_batch, en_n_batch, eg_p_batch, eg_aug_batch]]
-
-                if i == update_grid_i:
-                    model.update_grid(en_p_batch, en_n_batch)
 
                 i += 1
                 score_pos = rescale(model(en_p_batch, eg_p_batch))
@@ -70,10 +63,9 @@ def train_model(args, dataloader, model, optimizer, loss_function):
         if loss_pos < stats["best_loss"]:
             stats["best_loss"] = loss_pos
             stats["best_epoch"] = epoch
-            model.save(state_path)
+            torch.save(model.state_dict(), state_path)
         optimizer.step()
 
-    model.after_train()
     time_train = time.time() - time_train
     return state_path, stats, time_train
 
