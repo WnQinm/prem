@@ -83,7 +83,7 @@ def load_mat(dataset, train_rate=0.3, val_rate=0.1):
     return adj, feat, labels, idx_train, idx_val, idx_test, ano_labels, str_ano_labels, attr_ano_labels
 
 def load_dataset(dataset):
-    print('Dataset: {}'.format(dataset), flush=True)
+    # print('Dataset: {}'.format(dataset), flush=True)
     adj, features, _, _, _, _, ano_label, str_ano_label, attr_ano_label = load_mat(dataset)
     features, _ = preprocess_features(features)
     src, dst = np.nonzero(adj)

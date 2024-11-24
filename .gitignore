@@ -163,3 +163,5 @@ modules/efficient_kan.py
 *.pickle
 *.pkl
 *.mat
+*.xlsx
+*.csv

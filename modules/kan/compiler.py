@@ -1,7 +1,7 @@
 from sympy import *
 import sympy
 import numpy as np
-from kan.MultKAN import MultKAN
+from .MultKAN import MultKAN
 import torch
 
 def next_nontrivial_operation(expr, scale=1, bias=0):
@@ -56,13 +56,13 @@ def next_nontrivial_operation(expr, scale=1, bias=0):
                         scale = expr.args[n_num_id[i]]
                     else:
                         scale *= expr.args[n_num_id[i]]
-            
+
             return next_nontrivial_operation(expr.func(*var_args), scale, bias)
         else:
             return expr, scale, bias
     else:
         return expr, scale, bias
-    
+
 
 def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
     '''
@@ -161,10 +161,10 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
             self.child_index = child.index
             self.power_exponent = power_exponent # if fun == Pow
             Connections[(self.depth,self.parent_index,self.child_index)] = self
-            
+
     def create_node(expr, parent=None, n_layer=None):
         #print('before', expr)
-        expr, scale, bias = next_nontrivial_operation(expr) 
+        expr, scale, bias = next_nontrivial_operation(expr)
         #print('after', expr)
         if parent == None:
             depth = 0
@@ -312,7 +312,7 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
         c.affine[1] = float(node.bias)
         node.scale = 1.
         node.bias = 0.
-        
+
     #input_variables = symbol
     node2var = []
     for node in Start_Nodes:
@@ -320,7 +320,7 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
             if node.expr == input_variables[i]:
                 node2var.append(i)
 
-    # Nodes 
+    # Nodes
     n_mult = []
     n_sum = []
     for layer in Nodes:
@@ -380,7 +380,7 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
 
     for index in list(Connections.keys()):
         depth, subnode_id, node_id = index
-        # to int(n_layer-depth), 
+        # to int(n_layer-depth),
         _, kan_subnode_id = subnode_index_convert[(depth, subnode_id)]
         _, kan_node_id = node_index_convert[(depth, node_id)]
         connection_index_convert[(depth, subnode_id, node_id)] = (n_layer-depth, kan_subnode_id, kan_node_id)
@@ -389,19 +389,19 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
     n_sum.reverse()
     n_mult.reverse()
     mult_arities.reverse()
-    
+
     width = [[n_sum[i], n_mult[i]] for i in range(len(n_sum))]
     width[0][0] = len(input_variables)
 
     # allow pass in other parameters (probably as a dictionary) in sf2kan, including grid k etc.
     model = MultKAN(width=width, mult_arity=mult_arities, grid=grid, k=k, auto_save=auto_save)
-    
+
     # clean the graph
     for l in range(model.depth):
         for i in range(model.width_in[l]):
             for j in range(model.width_out[l+1]):
                 model.fix_symbolic(l,i,j,'0',fit_params_bool=False)
-                
+
     # Nodes
     Nodes_flat = [x for xs in Nodes for x in xs]
 
@@ -415,8 +415,8 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
         if kan_node_depth > 0:
             self.node_scale[kan_node_depth-1].data[kan_node_index] = float(node.scale)
             self.node_bias[kan_node_depth-1].data[kan_node_index] = float(node.bias)
-            
-    
+
+
     # SubNodes
     SubNodes_flat = [x for xs in SubNodes for x in xs]
 
@@ -427,7 +427,7 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
         #print(kan_subnode_depth, kan_subnode_index)
         self.subnode_scale[kan_subnode_depth].data[kan_subnode_index] = float(subnode.scale)
         self.subnode_bias[kan_subnode_depth].data[kan_subnode_index] = float(subnode.bias)
-        
+
     # Connections
     Connections_flat = list(Connections.values())
 
@@ -491,7 +491,7 @@ def expr2kan(input_variables, expr, grid=5, k=3, auto_save=False):
 
         model.fix_symbolic(kc_depth, kc_i, kc_j, kfun_name, fit_params_bool=False)
         model.symbolic_fun[kc_depth].affine.data.reshape(self.width_out[kc_depth+1], self.width_in[kc_depth], 4)[kc_j][kc_i] = torch.tensor(connection.affine)
-        
+
     return model
 
 

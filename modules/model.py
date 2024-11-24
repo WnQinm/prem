@@ -6,7 +6,6 @@ import dgl.function as fn
 import os
 import sys
 
-# from .kan import KANLinear
 from .kan import KAN
 
 
@@ -19,7 +18,7 @@ class Dataloader:
 
         self.en = features.detach()
         if dataset_name is not None and os.path.isfile(f"./cache/{dataset_name}.pickle"):
-            print(f"Load precomputed graph emb from ./cache/{dataset_name}.pickle")
+            # print(f"Load precomputed graph emb from ./cache/{dataset_name}.pickle")
             with open(f"./cache/{dataset_name}.pickle", "rb") as fp:
                 precomputed = pickle.load(fp)
                 self.weight = precomputed["weight"].to(features.device)
@@ -27,13 +26,13 @@ class Dataloader:
                 self.eg = precomputed["eg"].to(features.device)
 
         else:
-            print("Preprocessing: Aggregrate neighbour embeddings")
+            # print("Preprocessing: Aggregrate neighbour embeddings")
             self.weight = get_diag(self.g, self.k)
             aggregated = aggregation(self.g, features, self.k)
             self.features_weighted = (features.swapaxes(1, 0) * self.weight).swapaxes(1, 0).detach()
             self.eg = (aggregated - self.features_weighted).detach()
             if dataset_name is not None:
-                print(f"Save graph emb to ./cache/{dataset_name}.pickle")
+                # print(f"Save graph emb to ./cache/{dataset_name}.pickle")
                 if not os.path.isdir("./cache"):
                     os.makedirs("./cache")
                 with open(f"./cache/{dataset_name}.pickle", "wb") as fp:
@@ -43,24 +42,13 @@ class Dataloader:
                         "eg": self.eg.to("cpu")
                     }, fp)
 
-    def get_data(self, epoch=-1):
+    def get_data(self):
         en_p = self.en
         eg_p = self.eg
         perm = torch.randperm(en_p.shape[0])
         en_n = en_p[perm]
         eg_aug = eg_p[perm]
         return en_p, en_n, eg_p, eg_aug
-
-
-class Discriminator(nn.Module):
-    def __init__(self, n_in, n_hidden):
-        super(Discriminator, self).__init__()
-        self.fc_g = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3)
-        self.fc_n = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3)
-
-    def forward(self, features, summary):
-        s = torch.nn.functional.cosine_similarity(self.fc_n(features), self.fc_g(summary))
-        return -1 * s.unsqueeze(0)
 
 
 def aggregation(graph, feat, k):
@@ -94,8 +82,30 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.g = g
         self.k = k
-        self.discriminator = Discriminator(n_in, n_hidden)
+        self.fc_g = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
+        self.fc_n = KAN(width=[n_in, n_hidden, n_hidden], grid=5, k=3, auto_save=False)
 
     def forward(self, target_features, neighbour_features):
-        score = self.discriminator(target_features.detach(), neighbour_features.detach())
-        return score
+        score = torch.nn.functional.cosine_similarity(self.fc_n(target_features.detach()), self.fc_g(neighbour_features.detach()))
+        return -1 * score.unsqueeze(0)
+
+    def before_train(self, lamb=0):
+        self.old_save_act, self.old_symbolic_enabled = zip(self.fc_g.disable_symbolic_in_fit(lamb), self.fc_n.disable_symbolic_in_fit(lamb))
+
+    def after_train(self):
+        self.fc_g.save_act, self.fc_n.save_act = self.old_save_act
+        self.fc_g.symbolic_enabled, self.fc_n.symbolic_enabled = self.old_symbolic_enabled
+
+    def save(self, path):
+        os.makedirs(path, exist_ok=True)
+        self.fc_g.saveckpt(path+"/fc_g")
+        self.fc_n.saveckpt(path+"/fc_n")
+
+    def load(self, path):
+        self.fc_g = KAN.loadckpt(path+"/fc_g")
+        self.fc_n = KAN.loadckpt(path+"/fc_n")
+
+    @torch.no_grad()
+    def update_grid(self, target_features, neighbour_features):
+        self.fc_g.update_grid(target_features)
+        self.fc_n.update_grid(neighbour_features)

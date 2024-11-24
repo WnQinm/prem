@@ -5,17 +5,17 @@ from sympy.utilities.lambdify import lambdify
 from sklearn.cluster import AgglomerativeClustering
 from .utils import batch_jacobian, batch_hessian
 from functools import reduce
-from kan.utils import batch_jacobian, batch_hessian
-import copy 
+from .utils import batch_jacobian, batch_hessian
+import copy
 import matplotlib.pyplot as plt
-import sympy 
+import sympy
 from sympy.printing import latex
 
 
 def detect_separability(model, x, mode='add', score_th=1e-2, res_th=1e-2, n_clusters=None, bias=0., verbose=False):
     '''
         detect function separability
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -36,14 +36,14 @@ def detect_separability(model, x, mode='add', score_th=1e-2, res_th=1e-2, n_clus
         Returns:
         --------
             results (dictionary)
-            
+
         Example1
         --------
         >>> from kan.hypothesis import *
         >>> model = lambda x: x[:,[0]] ** 2 + torch.exp(x[:,[1]]+x[:,[2]])
         >>> x = torch.normal(0,1,size=(100,3))
         >>> detect_separability(model, x, mode='add')
-        
+
         Example2
         --------
         >>> from kan.hypothesis import *
@@ -52,31 +52,31 @@ def detect_separability(model, x, mode='add', score_th=1e-2, res_th=1e-2, n_clus
         >>> detect_separability(model, x, mode='mul')
     '''
     results = {}
-    
+
     if mode == 'add':
         hessian = batch_hessian(model, x)
     elif mode == 'mul':
         compose = lambda *F: reduce(lambda f, g: lambda x: f(g(x)), F)
         hessian = batch_hessian(compose(torch.log, torch.abs, lambda x: x+bias, model), x)
-        
+
     std = torch.std(x, dim=0)
     hessian_normalized = hessian * std[None,:] * std[:,None]
     score_mat = torch.median(torch.abs(hessian_normalized), dim=0)[0]
     results['hessian'] = score_mat
 
     dist_hard = (score_mat < score_th).float()
-    
+
     if isinstance(n_clusters, int):
         n_cluster_try = [n_clusters, n_clusters]
     elif isinstance(n_clusters, list):
         n_cluster_try = n_clusters
     else:
         n_cluster_try = [1,x.shape[1]]
-        
+
     n_cluster_try = list(range(n_cluster_try[0], n_cluster_try[1]+1))
-    
+
     for n_cluster in n_cluster_try:
-        
+
         clustering = AgglomerativeClustering(
           metric='precomputed',
           n_clusters=n_cluster,
@@ -91,20 +91,20 @@ def detect_separability(model, x, mode='add', score_th=1e-2, res_th=1e-2, n_clus
         total_sum = torch.sum(score_mat)
         residual_sum = total_sum - block_sum
         residual_ratio = residual_sum / total_sum
-        
+
         if verbose == True:
             print(f'n_group={n_cluster}, residual_ratio={residual_ratio}')
-        
+
         if residual_ratio < res_th:
             results['n_groups'] = n_cluster
             results['labels'] = list(labels)
             results['groups'] = groups
-            
+
     if results['n_groups'] > 1:
         print(f'{mode} separability detected')
     else:
         print(f'{mode} separability not detected')
-            
+
     return results
 
 
@@ -119,10 +119,10 @@ def batch_grad_normgrad(model, x, group, create_graph=False):
         norm = torch.norm(input_grad_A, dim=1, keepdim=True) + 1e-6
         input_grad_A_normalized = input_grad_A/norm
         return input_grad_A_normalized
-    
+
     def _jac_sum(x):
         return jac(x).sum(dim=0)
-    
+
     return torch.autograd.functional.jacobian(_jac_sum, x, create_graph=create_graph).permute(1,0,2)[:,:,group_B]
 
 
@@ -138,7 +138,7 @@ def get_dependence(model, x, group):
 def test_symmetry(model, x, group, dependence_th=1e-3):
     '''
         detect function separability
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -151,7 +151,7 @@ def test_symmetry(model, x, group, dependence_th=1e-3):
         Returns:
         --------
             bool
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -162,7 +162,7 @@ def test_symmetry(model, x, group, dependence_th=1e-3):
     '''
     if len(group) == x.shape[1] or len(group) == 0:
         return True
-    
+
     dependence = get_dependence(model, x, group)
     max_dependence = torch.max(dependence)
     return max_dependence < dependence_th
@@ -171,7 +171,7 @@ def test_symmetry(model, x, group, dependence_th=1e-3):
 def test_separability(model, x, groups, mode='add', threshold=1e-2, bias=0):
     '''
         test function separability
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -190,7 +190,7 @@ def test_separability(model, x, groups, mode='add', threshold=1e-2, bias=0):
         Returns:
         --------
             bool
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -208,27 +208,27 @@ def test_separability(model, x, groups, mode='add', threshold=1e-2, bias=0):
     std = torch.std(x, dim=0)
     hessian_normalized = hessian * std[None,:] * std[:,None]
     score_mat = torch.median(torch.abs(hessian_normalized), dim=0)[0]
-    
+
     sep_bool = True
-    
+
     # internal test
     n_groups = len(groups)
     for i in range(n_groups):
         for j in range(i+1, n_groups):
             sep_bool *= torch.max(score_mat[groups[i]][:,groups[j]]) < threshold
-            
+
     # external test
     group_id = [x for xs in groups for x in xs]
     nongroup_id = list(set(range(x.shape[1])) - set(group_id))
     if len(nongroup_id) > 0 and len(group_id) > 0:
-        sep_bool *= torch.max(score_mat[group_id][:,nongroup_id]) < threshold 
+        sep_bool *= torch.max(score_mat[group_id][:,nongroup_id]) < threshold
 
     return sep_bool
 
 def test_general_separability(model, x, groups, threshold=1e-2):
     '''
         test function separability
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -247,7 +247,7 @@ def test_general_separability(model, x, groups, threshold=1e-2):
         Returns:
         --------
             bool
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -278,7 +278,7 @@ def test_general_separability(model, x, groups, threshold=1e-2):
 def get_molecule(model, x, sym_th=1e-3, verbose=True):
     '''
         how variables are combined hierarchically
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -291,7 +291,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
         Returns:
         --------
             list
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -310,9 +310,9 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
     already_full = False
     n_layer = 0
     last_n_molecule = n
-    
+
     while True:
-        
+
 
         pointer = 0
         current_molecule = []
@@ -320,7 +320,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
         n_atom = 0
 
         while len(atoms) > 0:
-            
+
             # assemble molecule
             atom = atoms[pointer]
             if verbose:
@@ -345,7 +345,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
                         n_atom += 1
 
             pointer += 1
-            
+
             if pointer == len(atoms) or full:
                 molecules.append(current_molecule)
                 if full:
@@ -357,7 +357,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
                 current_molecule = []
                 remove_atoms = []
                 pointer = 0
-                
+
         # if not making progress, terminate
         if len(molecules) == last_n_molecule:
             def flatten(xss):
@@ -366,7 +366,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
             break
         else:
             moleculess.append(copy.deepcopy(molecules))
-            
+
         last_n_molecule = len(molecules)
 
         if len(molecules) == 1:
@@ -374,12 +374,12 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
 
         atoms = molecules
         molecules = []
-        
+
         n_layer += 1
-        
+
         #print(n_layer, atoms)
-        
-        
+
+
     # sort
     depth = len(moleculess) - 1
 
@@ -406,7 +406,7 @@ def get_molecule(model, x, sym_th=1e-3, verbose=True):
 def get_tree_node(model, x, moleculess, sep_th=1e-2, skip_test=True):
     '''
         get tree nodes
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -421,7 +421,7 @@ def get_tree_node(model, x, moleculess, sep_th=1e-2, skip_test=True):
         --------
             arities : list of numbers
             properties : list of strings
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -432,7 +432,7 @@ def get_tree_node(model, x, moleculess, sep_th=1e-2, skip_test=True):
     '''
     arities = []
     properties = []
-    
+
     depth = len(moleculess) - 1
 
     for l in range(depth):
@@ -461,7 +461,7 @@ def get_tree_node(model, x, moleculess, sep_th=1e-2, skip_test=True):
                     gensep_bool = False
                 else:
                     gensep_bool = test_general_separability(model, x, groups, threshold=sep_th)
-                    
+
                 if gensep_bool:
                     property = 'GS'
                 if l == depth - 1:
@@ -482,14 +482,14 @@ def get_tree_node(model, x, moleculess, sep_th=1e-2, skip_test=True):
 
         arities.append(arity_l)
         properties.append(property_l)
-        
+
     return arities, properties
 
 
 def plot_tree(model, x, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, skip_sep_test=False, verbose=False):
     '''
         get tree graph
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -510,7 +510,7 @@ def plot_tree(model, x, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, ski
         Returns:
         --------
             a tree graph
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -534,7 +534,7 @@ def plot_tree(model, x, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, ski
         in_vars = var
     else:
         in_vars = [sympy.symbols(var_) for var_ in var]
-        
+
 
     def flatten(xss):
         return [x for xs in xss for x in xs]
@@ -608,7 +608,7 @@ def plot_tree(model, x, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, ski
                 verticalalignment='center', color='red', fontsize=40)
                 if property == 'Id':
                     plt.plot([center_x, center_x], [center_y-width_y/2, center_y+width_y/2], color='black')
-                    
+
                 if property == '':
                     myrectangle(center_x, center_y, width_x, width_y)
 
@@ -634,7 +634,7 @@ def plot_tree(model, x, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, ski
 def test_symmetry_var(model, x, input_vars, symmetry_var):
     '''
         test symmetry
-        
+
         Args:
         -----
             model : MultKAN, MLP or python function
@@ -646,7 +646,7 @@ def test_symmetry_var(model, x, input_vars, symmetry_var):
         Returns:
         --------
             cosine similarity
-            
+
         Example
         -------
         >>> from kan.hypothesis import *
@@ -661,7 +661,7 @@ def test_symmetry_var(model, x, input_vars, symmetry_var):
     '''
     orig_vars = input_vars
     sym_var = symmetry_var
-    
+
     # gradients wrt to input (model)
     input_grad = batch_jacobian(model, x)
 
@@ -670,7 +670,7 @@ def test_symmetry_var(model, x, input_vars, symmetry_var):
 
     func2 = lambda x: func(*[x[:,[i]] for i in range(len(orig_vars))])
     sym_grad = batch_jacobian(func2, x)
-    
+
     # get id
     idx = []
     sym_symbols = list(sym_var.free_symbols)
@@ -678,18 +678,18 @@ def test_symmetry_var(model, x, input_vars, symmetry_var):
         for j in range(len(orig_vars)):
             if sym_symbol == orig_vars[j]:
                 idx.append(j)
-                
+
     input_grad_part = input_grad[:,idx]
     sym_grad_part = sym_grad[:,idx]
-    
+
     cossim = torch.abs(torch.sum(input_grad_part * sym_grad_part, dim=1)/(torch.norm(input_grad_part, dim=1)*torch.norm(sym_grad_part, dim=1)))
-    
+
     ratio = torch.sum(cossim > 0.9)/len(cossim)
-    
+
     print(f'{100*ratio}% data have more than 0.9 cosine similarity')
     if ratio > 0.9:
         print('suggesting symmetry')
     else:
         print('not suggesting symmetry')
-        
+
     return cossim
