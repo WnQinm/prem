@@ -1,5 +1,7 @@
 ## TODO
 
+### 训练问题
+
 linear和kan混合使用adam训练时：
 
 - linear部分下降快，需要的学习率0.003左右，但会过拟合，需要早停
@@ -9,6 +11,12 @@ linear和kan混合使用adam训练时：
 
 - 细调学习率，或者冻结参数（同时还得找最优超参）
 - 增加 linear 部分的复杂度，或者加正则项等
+
+### 网络结构问题
+
+[GKAN](https://github.com/WillHua127/GraphKAN-Graph-Kolmogorov-Arnold-Networks)发现kan无法直接处理原始输入数据，需要先用linear映射到隐空间
+
+待测
 
 ## 记录
 
@@ -35,6 +43,8 @@ linear和kan混合使用adam训练时：
 <img src="./assets/image-20241125021352355.png" alt="image-20241125021352355" style="zoom:50%;" />
 
 ### g Linear, n efficient kan: 0.74
+
+- 调参alpha gamma：
 
 ![image-20241125021855289](./assets/image-20241125021855289.png)
 
